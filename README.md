@@ -1,107 +1,141 @@
-# Multi-Agent Research Pipeline
+# ResearchMind - Multi-Agent Research System
 
-This project is a simple multi-agent research workflow built with LangChain. It takes a topic, searches the web for recent information, scrapes a relevant source, writes a structured report, and then critiques that report.
+ResearchMind is a premium full-stack MERN application that automates research and synthesis on any topic using a collaborative multi-agent execution pipeline. The application leverages a high-fidelity glassmorphism dark theme to deliver real-time progress visualization, structured report rendering, and detailed critiques.
 
-## What It Does
+---
 
-The pipeline in [pipeline.py](/d:/learn_ml/Gen%20ai/Multi_Agent/pipeline.py) runs four stages:
+## 🏗️ System Architecture
 
-1. Search agent finds recent and relevant web results.
-2. Reader agent chooses a promising URL and scrapes its content.
-3. Writer chain turns the gathered research into a structured report.
-4. Critic chain reviews the report and gives feedback.
+The application is built on a split client-server architecture with an asynchronous, state-driven agent pipeline.
 
-## Project Structure
-
-- [agents.py](/d:/learn_ml/Gen%20ai/Multi_Agent/agents.py): LLM setup, search/reader agents, writer chain, critic chain.
-- [tools.py](/d:/learn_ml/Gen%20ai/Multi_Agent/tools.py): Tavily search tool and URL scraping tool.
-- [pipeline.py](/d:/learn_ml/Gen%20ai/Multi_Agent/pipeline.py): End-to-end execution flow.
-- [requirements.txt](/d:/learn_ml/Gen%20ai/Multi_Agent/requirements.txt): Python dependencies.
-
-## How It Works
-
-The code uses:
-
-- `TavilyClient` for web search
-- `requests` + `BeautifulSoup` for scraping page text
-- `ChatMistralAI` as the LLM
-- LangChain agents/tools for orchestration
-
-The default model configured in [agents.py](/d:/learn_ml/Gen%20ai/Multi_Agent/agents.py) is `mistral-small` with `temperature=0`.
-
-## Setup
-
-### 1. Create and activate a virtual environment
-
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
+```mermaid
+graph TD
+    User([User]) <--> |React Console| Frontend[Vite + React UI]
+    Frontend <--> |HTTP API Polling| Backend[Express Backend Server]
+    Backend <--> |State persistence| DB[(MongoDB Database)]
+    
+    subgraph Multi-Agent Pipeline
+        Backend --> |1. Search Topic| Tavily[Tavily Search API]
+        Tavily --> |Top 5 Web Snippets| Backend
+        
+        Backend --> |2. URL Decision| Mistral1[Mistral AI - Reader Agent]
+        Mistral1 --> |Selected URL| Backend
+        
+        Backend --> |3. Crawl Page| Scraper[Cheerio Scraper Service]
+        Scraper --> |Main Text Content| Backend
+        
+        Backend --> |4. Write Draft| Mistral2[Mistral AI - Writer Agent]
+        Mistral2 --> |Structured Markdown Report| Backend
+        
+        Backend --> |5. Evaluate| Mistral3[Mistral AI - Critic Agent]
+        Mistral3 --> |Score X/10 & Feedback| Backend
+    end
 ```
 
-### 2. Install dependencies
+### Flow Breakdown
+1. **React UI**: The user submits a research topic. The UI triggers a background execution job and immediately displays a visual runner.
+2. **Express API**: Receives requests, creates a `ResearchJob` entry in MongoDB, starts the pipeline asynchronously, and returns the Job ID.
+3. **MongoDB State Machine**: Tracks job progress (`pending` ➔ `searching` ➔ `reading` ➔ `writing` ➔ `critiquing` ➔ `completed` / `failed`). The client polls the status endpoint every 1.5 seconds to refresh the progress runner.
+4. **Agent Pipeline Service**: Orchestrates APIs (Tavily search, Mistral LLM completions) and crawls pages using Cheerio, saving results incrementally at each step.
 
-```powershell
-pip install -r requirements.txt
-pip install langchain-mistralai
+---
+
+## 🤖 Multi-Agent Pipeline Stages
+
+ResearchMind splits the research workload across four specialized agent layers:
+
+1. **Search Agent**: Translates the topic into search queries and calls the Tavily Search API. Collects the top 5 titles, URLs, and text snippets.
+2. **Reader Agent**: Processes search snippets, calls Mistral to select the single most authoritative URL, and crawls it using Cheerio. It strips away scripts, styles, headers, and footers, keeping the main page text (truncated to 3,000 characters).
+3. **Writer Agent**: Combines search snippets and the deep crawled source page. Uses Mistral to synthesize this information into a structured markdown report (containing Introduction, Key Findings, Conclusion, and Sources).
+4. **Critic Agent**: Strictly reviews the generated report. Evaluates strengths, highlights weaknesses, scores the report out of 10, and generates a one-line verdict.
+
+---
+
+## 📂 Repository Structure
+
+```
+Multi_Agent/
+├── backend/                  # Node.js + Express API server
+│   ├── models/
+│   │   └── ResearchJob.js    # Mongoose MongoDB schema
+│   ├── services/
+│   │   ├── agentService.js   # Main Mistral/Tavily orchestration
+│   │   └── scraperService.js # Axios + Cheerio text extraction
+│   ├── routes/
+│   │   └── research.js       # REST Endpoints (Create, Get, List, Delete)
+│   ├── server.js             # Express application entry point
+│   ├── test_api.js           # Automated integration test script
+│   └── package.json
+│
+├── frontend/                 # Vite + React Client
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── Sidebar.jsx   # Custom glass navigation panel
+│   │   │   ├── Dashboard.jsx # Metric summaries, input prompt, & history grid
+│   │   │   ├── ResearchRunner.jsx # Live pipeline visualization & logs
+│   │   │   └── ReportView.jsx # Markdown report viewer & score gauge
+│   │   ├── index.css         # Glassmorphism dark-theme stylesheets
+│   │   ├── App.jsx           # Client router and polling coordinator
+│   │   └── main.jsx
+│   ├── index.html
+│   ├── vite.config.js
+│   └── package.json
+│
+├── .env                      # Application API and DB keys
+└── README.md
 ```
 
-Note: the code imports `langchain_mistralai.ChatMistralAI`, but `langchain-mistralai` is not currently listed in [requirements.txt](/d:/learn_ml/Gen%20ai/Multi_Agent/requirements.txt).
+---
 
-### 3. Create a `.env` file
+## ⚙️ Setup and Installation
 
-Add the required API keys:
+### Prerequisites
+- [Node.js](https://nodejs.org/) (v18+ recommended)
+- [MongoDB](https://www.mongodb.com/try/download/community) (Running locally on default port `27017` or a remote Atlas Connection URL)
+- Tavily API Key
+- Mistral AI API Key
 
+### 1. Environment Configurations
+Create a `.env` file at the root of the project:
 ```env
-TAVILY_API_KEY=your_tavily_api_key
-MISTRAL_API_KEY=your_mistral_api_key
+TAVILY_API_KEY = "your_tavily_api_key"
+MISTRAL_API_KEY = "your_mistral_api_key"
+MONGODB_URI = "mongodb://127.0.0.1:27017/researchmind"
 ```
+*(Note: If using MongoDB Atlas, replace `mongodb://127.0.0.1:27017/researchmind` with your connection string).*
 
-## Run
+### 2. Install Dependencies
 
+**For Backend:**
 ```powershell
-python pipeline.py
+cd backend
+npm install
 ```
 
-Then enter a research topic when prompted.
+**For Frontend:**
+```powershell
+cd ../frontend
+npm install
+```
 
-## Example Flow
+---
 
-If you enter a topic such as `latest trends in multi-agent AI systems`, the pipeline will:
+## 🚀 Running the Application
 
-- search the web for relevant results
-- scrape one selected resource
-- generate a report with introduction, findings, conclusion, and sources
-- generate a critique with a score and improvement suggestions
+Open two terminals or command lines:
 
-## Output
+#### Terminal 1: Launch Backend
+```powershell
+cd backend
+npm start
+```
+*Starts API server on [http://localhost:5000](http://localhost:5000)*
 
-The script prints intermediate progress and returns a Python `dict` with:
+#### Terminal 2: Launch Frontend
+```powershell
+cd frontend
+npm run dev
+```
+*Starts client dashboard on [http://localhost:5173](http://localhost:5173)*
 
-- `search_results`
-- `scraped_content`
-- `report`
-- `feedback`
-
-## Current Limitations
-
-- The reader agent is prompted to choose a URL from search results, but agent behavior depends on the model following that instruction correctly.
-- Scraped content is truncated to the first 3000 characters.
-- Search results shown to the reader are truncated to the first 800 characters.
-- There is minimal error handling beyond the scraper fallback message.
-- The project currently runs as a CLI script only.
-
-## Possible Improvements
-
-- Add `langchain-mistralai` to `requirements.txt`
-- Save reports to Markdown or JSON files
-- Support scraping multiple URLs instead of one
-- Add retries and validation around agent outputs
-- Add tests for tools and pipeline behavior
-- Replace `print` statements with structured logging
-
-## Requirements
-
-- Python 3.10+
-- Tavily API key
-- Mistral API key
-
+Open your browser to [http://localhost:5173](http://localhost:5173) to start researching!
